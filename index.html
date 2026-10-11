@@ -86,10 +86,10 @@
 <script>
 'use strict';
 // ================= 설정 =================
-const DEF = {hulkSpeed:1.35, spiderSpeed:1, startGap:20, goal:100, webSlowPct:50, webDur:2, elecStun:1, rockStun:1, clapHold:1, clapStun:3};
+const DEF = {hulkSpeed:1.35, spiderSpeed:1, startGap:20, goal:100, webSlowPct:50, webDur:2, elecStun:1, rockStun:1, clapHold:1, clapStun:3, showArrows:1};
 const LABELS = {hulkSpeed:'헐크 속도 (m/s)', spiderSpeed:'스파이더맨 속도 (m/s)', startGap:'시작 거리차 = 스파이더맨 시작 위치 (m)', goal:'총 거리 (m)',
   webSlowPct:'거미줄 수류탄 감속률 (%)', webDur:'거미줄 감속 지속 (초)', elecStun:'전기 수류탄 헐크 기절 (초)', rockStun:'돌 충돌 기절 (초)',
-  clapHold:'박수치기 준비 동작 (초)', clapStun:'박수치기 기절 (초)'};
+  clapHold:'박수치기 준비 동작 (초)', clapStun:'박수치기 기절 (초)', showArrows:'방향 화살표 표시 (1 = 켜기, 0 = 끄기)'};
 const FIX = {rockWarn:1, itemWarn:2, rockFaces:[2,2,3,4], rockInterval:[5,2.5,2.5,2.5], itemInterval:5,
   jumpTime:.3, tumbleTime:.3, landLock:.08, hitWin:.12};
 let CFG;
@@ -592,6 +592,17 @@ function drawScene(){
     withAt(sp.x,sp.y,sp.z,sp.r,.007,()=>drawSpider(sp.pose,sp.ph,sp.o||{}));
     const [fx,fy]=proj(sp.x,sp.y,sp.z), k=F/sp.z*.007*100; LAST.spiderHead=[fx+Math.sin(sp.r)*k,fy-Math.cos(sp.r)*k]; }});
   list.sort((a,b)=>b.z-a.z).forEach(o=>o.d());
+  if(state==='play' && CFG.showArrows && !S.move && S.sStun<=0) drawArrowHints();
+}
+// 방향 화살표: ← → 를 눌렀을 때 갈 면에 키 모양 표시
+function drawArrowHints(){
+  const a=.55+.25*Math.sin(tNow*5);
+  for(const [dir,glyph] of [['left','←'],['right','→']]){
+    const to=moveTarget(S.face,dir), p=facePos(to,.2), [x,y]=proj(p.x,p.y,ZS+.15);
+    g.save(); g.globalAlpha=a; g.translate(x,y);
+    rr(-22,-22,44,44,10); g.fillStyle='rgba(255,255,255,.92)'; g.fill(); g.lineWidth=3.5; g.strokeStyle='#111'; g.stroke();
+    g.fillStyle='#111'; g.font='bold 30px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(glyph,0,1);
+    g.restore(); }
 }
 function webStrands(hz){ const [cx,cy]=proj(0,AP-.016*60,hz); g.strokeStyle='rgba(255,255,255,.75)'; g.lineWidth=clamp(6/hz,.6,3);
   for(const j of [0,1,2,3,4,5]){ const [x,y]=vtx(j,hz+.3); g.beginPath(); g.moveTo(cx,cy); g.quadraticCurveTo((cx+x)/2,(cy+y)/2+10,x,y); g.stroke(); } }
