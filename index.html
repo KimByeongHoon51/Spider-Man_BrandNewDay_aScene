@@ -91,7 +91,7 @@ const LABELS = {hulkSpeed:'헐크 속도 (m/s)', spiderSpeed:'스파이더맨 �
   webSlowPct:'거미줄 수류탄 감속률 (%)', webDur:'거미줄 감속 지속 (초)', elecStun:'전기 수류탄 헐크 기절 (초)', rockStun:'돌 충돌 기절 (초)',
   clapHold:'박수치기 준비 동작 (초)', clapStun:'박수치기 기절 (초)'};
 const FIX = {rockWarn:1, itemWarn:2, rockFaces:[2,2,3,4], rockInterval:[5,2.5,2.5,2.5], itemInterval:5,
-  jumpTime:.3, tumbleTime:.5, landLock:.08, hitWin:.12};
+  jumpTime:.3, tumbleTime:.3, landLock:.08, hitWin:.12};
 let CFG;
 function loadCfg(){
   let saved={}; try{ saved=JSON.parse(localStorage.getItem('bnd_balance')||'{}'); }catch(e){}
@@ -205,25 +205,33 @@ function musicTick(){
 
 // ================= 상태 =================
 let S=null, state='title', paused=false, tNow=0;
-const parts=[], pops=[];
+const parts=[], pops=[], bubbles=[];
+const LAST={hulkHead:null, spiderHead:null};
+function say(who,text,life=1.5,big=false){ for(let i=bubbles.length-1;i>=0;i--) if(bubbles[i].who===who) bubbles.splice(i,1); bubbles.push({who,text,life,max:life,big}); }
 let shake=0, flash=0;
 function newRun(){
   const start = HASH.start ? +HASH.start : CFG.startGap;
   S={t:0, sp:start, hp:start-CFG.startGap, face:0, move:null, landLock:0, sStun:0, stunType:'', hSlow:0, hStun:0, hHold:0, clapped:false, clapT:0,
     rockT:2.5-CFG.rockWarn, itemT:CFG.itemInterval-CFG.itemWarn, itemN:0, rocks:[], items:[], grenades:[], runPh:0, hulkPh:0, lastStep:0,
-    hits:0, booms:0, introT:0, overT:0, endT:0, phase:0, god:!!HASH.god};
+    hits:0, booms:0, p4:-1, zoom:0, clapShow:0, introT:0, overT:0, endT:0, phase:0, god:!!HASH.god};
   if(HASH.start && start>=phaseAt()[2]) S.clapped=true;
-  camP=S.sp; parts.length=0; pops.length=0;
+  camP=S.sp; parts.length=0; pops.length=0; bubbles.length=0;
 }
 newRun();
 
 // ================= 입력 =================
 function lowerHalf(f){ return f===0||f===1||f===5; }
+const faceX=f=>Math.round(Math.cos(FACE_A[f])*100);
+// ← = 화면에서 왼쪽에 있는 옆 면, → = 오른쪽에 있는 옆 면 (없으면 이동 안 함), ↑↓ = 맞은편 면
+function moveTarget(face,dir){
+  if(dir==='up'||dir==='down') return (face+3)%6;
+  const sgn=dir==='right'?1:-1;
+  const c=[(face+1)%6,(face+5)%6].find(n=>Math.sign(faceX(n)-faceX(face))===sgn);
+  return c===undefined?-1:c;
+}
 function tryMove(dir){
   if(state!=='play'||paused||!S||S.move||S.sStun>0||S.landLock>0) return;
-  let to;
-  if(dir==='up'||dir==='down') to=(S.face+3)%6;
-  else { const cw=(dir==='right') !== lowerHalf(S.face); to=(S.face+(cw?1:5))%6; }
+  const to=moveTarget(S.face,dir); if(to<0) return;
   const tumble=(dir==='up'||dir==='down');
   S.move={from:S.face,to,t:0,dur:tumble?FIX.tumbleTime:FIX.jumpTime,type:tumble?'tumble':'jump'};
   tumble?SFX.tumble():SFX.jump();
@@ -285,10 +293,13 @@ function spiderScreen(){ const p=spiderPose(); return proj(p.x,p.y,p.z); }
 function updatePlay(dt){
   S.t+=dt;
   // 박수치기 (4페이즈 진입 시 1회)
-  if(!S.clapped && S.sp>=phaseAt()[2]){ S.clapped=true; S.hHold=CFG.clapHold; S.clapT=0; SFX.sense('rock'); }
+  if(!S.clapped && S.sp>=phaseAt()[2]){ S.clapped=true; S.p4=0; say('hulk','RAAAARGH!',2,true); SFX.roar(); }
+  if(S.p4>=0){ S.p4+=dt; if(S.p4>=2 && !S.windup){ S.windup=1; S.hHold=CFG.clapHold; S.clapT=0; SFX.sense('rock'); } }
+  { const tgt=(S.p4>=0 && (S.hHold>0 || S.p4<2 || S.clapShow>0)) ? 1 : 0; S.zoom+=(tgt-S.zoom)*Math.min(1,dt*4); }
+  if(S.clapShow>0) S.clapShow-=dt;
   if(S.hHold>0){ S.hHold-=dt; S.clapT+=dt;
     if(S.hHold<=0){ S.sStun=Math.max(S.sStun,CFG.clapStun); S.stunType='clap'; shake=22; flash=.25; SFX.clap();
-      const [hx,hy]=proj(0,AP-.016*64,hulkZ(S.sp-S.hp)); pop('CLAP!!',hx,hy-30,'#9cff6a',70,1.2); S.clapWave=1;
+      pop('CLAP!!',CX,92,'#ffffff',90,1.3); S.clapWave=1; S.clapShow=.9;
       if(S.move){ S.face=S.move.to; S.move=null; } } }
   // 스파이더맨
   if(S.move){ S.move.t+=dt; if(S.move.t>=S.move.dur){ S.face=S.move.to; S.move=null; S.landLock=FIX.landLock; } }
@@ -321,7 +332,7 @@ function updatePlay(dt){
   for(const it of S.items){ if(it.state!=='pending') continue;
     if(grounded && S.face===it.face && S.sp>=it.p-W_ && S.sp<=it.p+W_){ it.state='got';
       S.grenades.push({p:it.p,face:it.face,type:it.type}); SFX.pickup();
-      const [x,y]=spiderScreen(); pop(it.type==='web'?'THWIP!':'ZZT!',x,y-160,it.type==='web'?'#ffffff':'#7fe4ff',40); }
+      say('spider','HAND GRENADE!',1.2); }
     else if(S.sp>it.p+W_) it.state='missed'; }
   // 헐크
   const gap0=S.sp-S.hp;
@@ -362,7 +373,7 @@ function spiderPose(){
     const a=a0+da*e, rad=AP*(1-.32*Math.sin(Math.PI*u));
     return {x:Math.cos(a)*rad,y:Math.sin(a)*rad,z:ZS,r:a-Math.PI/2,pose:'jump',webTo:B}; }
   const cx=lerp(A.x,B.x,e), cy=lerp(A.y,B.y,e);
-  return {x:cx,y:cy,z:ZS,r:A.r+3*Math.PI*e,pose:'tuck'};
+  return {x:cx,y:cy,z:ZS,r:A.r+Math.PI*e,pose:'tuck'};
 }
 
 // ================= 그리기: 복도 =================
@@ -494,8 +505,8 @@ function drawHulk(pose,ph,o={}){
   for(const [i,s] of [[0,-1],[1,1]]){
     const k=i===0?Math.sin(ph):-Math.sin(ph);
     let el=[s*54,-54-4*k], fs=[s*(44-16*k),-46-14*k], r=11+3*Math.max(k,0), behind=k<0;
-    if(pose==='windup'){ const u=o.u??1; el=[s*lerp(54,66,u),lerp(-54,-80,u)]; fs=[s*lerp(46,76,u),lerp(-40,-104,u)]; r=13; behind=false; }
-    if(pose==='clap'){ el=[s*40,-58]; fs=[s*8,-64]; r=14; behind=false; }
+    if(pose==='windup'){ const u=o.u??1; el=[s*lerp(54,84,u),lerp(-54,-88,u)]; fs=[s*lerp(46,104,u),lerp(-40,-118,u)]; r=lerp(13,16,u); behind=false; }
+    if(pose==='clap'){ const u=o.u??1; el=[s*lerp(84,46,u),lerp(-88,-62,u)]; fs=[s*lerp(104,9,u),lerp(-118,-68,u)]; r=16; behind=false; }
     if(pose==='roar'){ el=[s*64,-64]; fs=[s*52,-94]; r=13; behind=false; }
     if(pose==='stand'){ el=[s*54,-52]; fs=[s*56,-30]; r=12; behind=false; }
     if(pose==='jawhit'){ el=[s*62,-72]; fs=[s*72,-92]; r=12; behind=false; }
@@ -520,12 +531,14 @@ function drawHulk(pose,ph,o={}){
   g.fillStyle='#15151a'; g.fill();
   for(const s of [-1,1]){ g.beginPath(); g.ellipse(s*6,-89.5,3,1.6,0,0,Math.PI*2); g.fillStyle=o.zap?'#bff7ff':'#fff'; g.fill();
     g.fillStyle='#111'; g.beginPath(); g.moveTo(s*11,-94); g.lineTo(s*1.5,-90); g.lineTo(s*2,-92.5); g.lineTo(s*11,-96); g.closePath(); g.fill(); }
-  const open = pose==='roar'||pose==='windup'||pose==='clap'||pose==='jawhit'||pose==='grab';
+  const open = o.shout||pose==='roar'||pose==='windup'||pose==='clap'||pose==='jawhit'||pose==='grab';
   if(open){ g.beginPath(); g.ellipse(0,-81,6,4,0,0,Math.PI*2); g.fillStyle='#2a0a0a'; g.fill(); g.fillStyle='#fff'; g.fillRect(-5,-85,10,2); g.fillRect(-4,-79,8,1.6); }
   else { g.fillStyle='#fff'; g.fillRect(-6,-83,12,4); g.strokeStyle='#111'; g.lineWidth=1; g.strokeRect(-6,-83,12,4); g.beginPath(); g.moveTo(-6,-81); g.lineTo(6,-81); for(let x=-3;x<=3;x+=3){ g.moveTo(x,-83); g.lineTo(x,-79);} g.stroke(); }
   g.restore();
   arms.filter(a=>!a.behind).forEach(drawArm);
-  if(pose==='clap'){ g.strokeStyle='#fff'; g.lineWidth=2.5; for(let n=0;n<8;n++){ const a=n/8*Math.PI*2; g.beginPath(); g.moveTo(Math.cos(a)*20,-64+Math.sin(a)*20); g.lineTo(Math.cos(a)*34,-64+Math.sin(a)*34); g.stroke(); } }
+  if(pose==='clap' && (o.u??1)>=1){ g.save(); star(0,-68,30); g.fillStyle='#fff'; g.beginPath(); for(let n=0;n<16;n++){ const a=n/16*Math.PI*2, r=n%2?14:30; g.lineTo(Math.cos(a)*r,-68+Math.sin(a)*r); } g.closePath(); g.fill();
+    g.strokeStyle='#fff'; g.lineWidth=4; for(let n=0;n<12;n++){ const a=n/12*Math.PI*2; g.beginPath(); g.moveTo(Math.cos(a)*36,-68+Math.sin(a)*36); g.lineTo(Math.cos(a)*62,-68+Math.sin(a)*62); g.stroke(); } g.restore(); }
+  if(pose==='clap' && (o.u??1)<1){ g.strokeStyle='rgba(255,255,255,.8)'; g.lineWidth=3; for(const s of [-1,1]) for(let n=0;n<3;n++){ g.beginPath(); g.moveTo(s*(70+n*10),-130+n*12); g.lineTo(s*(110+n*10),-100+n*12); g.stroke(); } }
   // 거미줄 / 전기 효과
   if(o.web){ g.strokeStyle=`rgba(255,255,255,${.85*o.web})`; g.lineWidth=1.6;
     for(let n=0;n<10;n++){ const a=n/10*Math.PI*2; g.beginPath(); g.moveTo(0,-60); g.lineTo(Math.cos(a)*62,-60+Math.sin(a)*48); g.stroke(); }
@@ -550,7 +563,8 @@ function drawGrenade(type,r,blink){
 
 // ================= 장면 그리기 =================
 function withAt(x,y,z,rot,scaleWorld,fn){ const [sx,sy]=proj(x,y,z), s=F/z*scaleWorld; g.save(); g.translate(sx,sy); g.rotate(rot); g.scale(s,s); fn(); g.restore(); }
-function drawHulkAt(z,pose,ph,o){ if(z<NEAR+.05) return; withAt(0,AP,z,0,.016,()=>drawHulk(pose,ph,o)); }
+function drawHulkAt(z,pose,ph,o){ if(z<NEAR+.05) return; const b=o.boost||1;
+  LAST.hulkHead=proj(0,AP-.016*b*104,z); withAt(0,AP,z,0,.016*b,()=>drawHulk(pose,ph,o)); }
 function drawScene(){
   drawCorridor();
   if(state==='play') drawWarnings();
@@ -562,7 +576,7 @@ function drawScene(){
   else if(state==='intro'){ hz=S.introHz; hpose=S.introHPose; hph=S.hulkPh; }
   else if(state==='over'||state==='overShown'){ hz=hulkZ(0); hpose=S.overHPose||'grab'; ho={hand:S.overHand,lift:S.overLift}; }
   else if(state==='ending'||state==='clearShown'){ hz=S.endHz; hpose=S.endHPose; }
-  else { hz=hulkZ(S.sp-S.hp); if(S.hHold>0) { hpose='windup'; ho.u=clamp(S.clapT/(CFG.clapHold*.7),0,1); } else if(S.clapWave>.6) hpose='clap'; }
+  else { hz=hulkZ(S.sp-S.hp); hz=lerp(hz,Math.min(hz,4.2),S.zoom); ho.boost=lerp(1,1.25,S.zoom); if(S.p4>=0&&S.p4<2) ho.shout=1; if(S.hHold>0) { hpose='windup'; ho.u=clamp(S.clapT/(CFG.clapHold*.6),0,1); } else if(S.clapShow>0) { hpose='clap'; ho.u=clamp((.9-S.clapShow)/.1,0,1); } }
   if(state==='play'){ if(S.hSlow>0) ho.web=Math.min(1,S.hSlow*2); if(S.hStun>0) ho.zap=1; }
   if(state==='intro') list.push({z:5,d:drawIntroWall});
   if(hz!==undefined && S.hulkVisible!==false) list.push({z:hz,d:()=>{ drawHulkAt(hz,hpose,hph,ho); if(ho.web) webStrands(hz); }});
@@ -578,7 +592,8 @@ function drawScene(){
   const sp=currentSpider();
   if(sp) list.push({z:sp.z-.001,d:()=>{
     if(sp.webTo){ const [hx,hy]=proj(sp.x,sp.y,sp.z), tp=proj(sp.webTo.x,sp.webTo.y,ZS+.8); g.strokeStyle='#fff'; g.lineWidth=2.5; g.beginPath(); g.moveTo(hx,hy-40); g.lineTo(tp[0],tp[1]); g.stroke(); }
-    withAt(sp.x,sp.y,sp.z,sp.r,.007,()=>drawSpider(sp.pose,sp.ph,sp.o||{})); }});
+    withAt(sp.x,sp.y,sp.z,sp.r,.007,()=>drawSpider(sp.pose,sp.ph,sp.o||{}));
+    const [fx,fy]=proj(sp.x,sp.y,sp.z), k=F/sp.z*.007*100; LAST.spiderHead=[fx+Math.sin(sp.r)*k,fy-Math.cos(sp.r)*k]; }});
   list.sort((a,b)=>b.z-a.z).forEach(o=>o.d());
 }
 function webStrands(hz){ const [cx,cy]=proj(0,AP-.016*60,hz); g.strokeStyle='rgba(255,255,255,.75)'; g.lineWidth=clamp(6/hz,.6,3);
@@ -602,7 +617,7 @@ function updateIntro(dt){
   else if(T<1.5){ if(!S.burst1){ S.burst1=1; SFX.crash(); shake=16; const [x,y]=proj(0,0,Zw); burst(x,y,40,{cols:['#8a6b55','#a07e62','#6c5444'],min:150,max:600,s0:4,s1:14}); pop('CRASH!',x,y-90,'#ffd23a',64); }
     const u=(T-.8)/.7, e=1-(1-u)*(1-u); S.introSp={x:0,y:lerp(0,AP,e),z:lerp(Zw,ZS,e),r:e*Math.PI*4,pose:'tuck',ph:0,o:{}}; }
   else { S.introSp={x:0,y:AP,z:ZS,r:0,pose:T<1.9?'land':T<2.9?'idle':'run',ph:S.runPh,o:{}}; if(!S.landed){ S.landed=1; shake=8; SFX.step(1); } }
-  if(T>=1.9 && !S.burst2){ S.burst2=1; SFX.crash(); setTimeout(()=>SFX.roar(),150); shake=20; const [x,y]=proj(0,0,Zw); burst(x,y,40,{cols:['#8a6b55','#a07e62','#6c5444'],min:150,max:600,s0:4,s1:14}); pop('RAAAGH!!',x,y-150,'#9cff6a',60,1.3); }
+  if(T>=1.9 && !S.burst2){ S.burst2=1; SFX.crash(); setTimeout(()=>SFX.roar(),150); shake=20; const [x,y]=proj(0,0,Zw); burst(x,y,40,{cols:['#8a6b55','#a07e62','#6c5444'],min:150,max:600,s0:4,s1:14}); say('hulk','HULK SMASH!',1.8,true); }
   if(T>=2.9){ const u=clamp((T-2.9)/1,0,1), e=ease(u); S.introHz=lerp(Zw,hulkZ(CFG.startGap),e); S.introHPose='run'; S.hulkPh+=dt*9; S.runPh+=dt*16;
     camP=S.sp-6*(1-e); if(!S.goPop){ S.goPop=1; pop('RUN!',CX,150,'#ff4040',90,1.1); } }
   if(T>=3.9){ state='play'; camP=S.sp; S.hulkVisible=true; }
@@ -636,7 +651,8 @@ function updateOver(dt){
   if(T>=.35){ const hs=hulkLocalToScreen(hand[0],hand[1],hz); sx=hs[0]; sy=hs[1]+(T<1.1?60*(F/hz*.007):0); r=T>=1.1?Math.PI/2:0; }
   S.overHand=hand; S.overLift=lift;
   if(T>=1.1 && !S.slammed){ S.slammed=1; shake=26; flash=.15; SFX.slam(); const hs=hulkLocalToScreen(6,0,hz);
-    burst(hs[0],hs[1],40,{cols:['#8a8f96','#b9bec4','#6b7077'],up:250,min:100,max:500}); pop('SMASH!!',hs[0],hs[1]-160,'#9cff6a',78,1.4); }
+    burst(hs[0],hs[1],40,{cols:['#8a8f96','#b9bec4','#6b7077'],up:250,min:100,max:500}); }
+  if(T>=.35 && !S.saidSmash){ S.saidSmash=1; say('hulk','HULK SMASH!',1.9,true); }
   if(T>=1.25) S.overHPose='roar';
   if(T>=1.4 && !S.roared){ S.roared=1; SFX.roar(); }
   // 스파이더맨을 화면 좌표로 직접 그리기 위해 역투영
@@ -678,8 +694,8 @@ function drawHUD(){
   // 결승 깃발
   g.fillStyle='#fff'; g.fillRect(x1+10,y-12,2,22); for(let i=0;i<3;i++) for(let j=0;j<2;j++){ g.fillStyle=(i+j)%2?'#111':'#fff'; g.fillRect(x1+12+i*5,y-12+j*5,5,5); }
   // 설치된 수류탄
-  if(state==='play' && S.grenades.length){ g.font='15px "Black Han Sans",sans-serif'; g.fillStyle='#fff'; g.textAlign='left'; g.fillText('설치된 수류탄',18,H-56);
-    S.grenades.forEach((gr,i)=>{ g.save(); g.translate(32+i*34,H-28); drawGrenade(gr.type,12,Math.sin(tNow*12)>0); g.restore(); }); }
+  if(state==='play' && S.grenades.length){ g.font='22px "Black Han Sans",sans-serif'; g.fillStyle='#fff'; g.textAlign='left'; g.lineWidth=4; g.strokeStyle='#000'; g.strokeText('설치된 수류탄',18,H-82); g.fillText('설치된 수류탄',18,H-82);
+    S.grenades.forEach((gr,i)=>{ g.save(); g.translate(44+i*64,H-38); drawGrenade(gr.type,24,Math.sin(tNow*12)>0); g.restore(); }); }
 }
 function drawHeadIcon(){ ell(0,-30,24,29,0,SRED,4); for(const s of [-1,1]){ g.save(); g.translate(s*11,-33); g.rotate(s*.45); g.beginPath(); g.ellipse(0,0,10,7,0,0,Math.PI*2); g.fillStyle='#fff'; g.fill(); g.lineWidth=4; g.strokeStyle='#111'; g.stroke(); g.restore(); } }
 function rr(x,y,w,h,r){ g.beginPath(); g.roundRect?g.roundRect(x,y,w,h,r):g.rect(x,y,w,h); }
@@ -699,6 +715,26 @@ function drawFx(dt){
     g.beginPath(); for(let n=0;n<16;n++){ const a=n/16*Math.PI*2, r=(n%2?.62:.8); g.lineTo(Math.cos(a)*(w*r+14),Math.sin(a)*(p.size*r+10)); } g.closePath();
     g.fillStyle='rgba(20,20,20,.85)'; g.fill();
     g.lineJoin='round'; g.lineWidth=8; g.strokeStyle='#111'; g.strokeText(p.txt,0,0); g.fillStyle=p.col; g.fillText(p.txt,0,0); g.restore(); }
+}
+function drawBubbles(dt){
+  for(let i=bubbles.length-1;i>=0;i--){ const b=bubbles[i]; if(b.life<=0){ bubbles.splice(i,1); continue; }
+    const anc=b.who==='hulk'?LAST.hulkHead:LAST.spiderHead; if(!anc) continue;
+    const hulk=b.who==='hulk', size=hulk?(b.big?64:48):30, age=b.max-b.life, sc=age<.12?lerp(.3,1.1,age/.12):age<.2?lerp(1.1,1,(age-.12)/.08):1;
+    g.save(); g.font=size+'px Bangers, Impact, sans-serif'; const tw=g.measureText(b.text).width, bw=tw+44, bh=size+28;
+    let cx=clamp(anc[0]+(hulk?(state==='over'||state==='overShown'?-190:0):70),bw/2+10,W-bw/2-10), cy=clamp(anc[1]-bh/2-46,bh/2+40,H-bh/2-10);
+    const tx=anc[0], ty=anc[1]-8;
+    g.translate(cx,cy); g.scale(sc,sc); g.globalAlpha=clamp(b.life*4,0,1);
+    // 꼬리
+    g.beginPath(); g.moveTo(-14,bh/2-6); g.lineTo((tx-cx)/sc,(ty-cy)/sc); g.lineTo(14,bh/2-6); g.closePath(); g.fillStyle='#fff'; g.fill(); g.lineWidth=4; g.strokeStyle='#111'; g.stroke();
+    // 풍선 (헐크는 들쭉날쭉한 외침 풍선)
+    g.beginPath();
+    if(hulk){ for(let n=0;n<24;n++){ const a=n/24*Math.PI*2, r=n%2?1:1.13; g.lineTo(Math.cos(a)*bw/2*r,Math.sin(a)*bh/2*r); } g.closePath(); }
+    else g.ellipse(0,0,bw/2,bh/2,0,0,Math.PI*2);
+    g.fillStyle='#fff'; g.fill(); g.lineWidth=4; g.stroke();
+    g.textAlign='center'; g.textBaseline='middle'; g.lineJoin='round';
+    if(hulk){ g.lineWidth=7; g.strokeStyle='#111'; g.strokeText(b.text,0,3); g.fillStyle='#3fc62e'; g.fillText(b.text,0,3); }
+    else { g.fillStyle='#111'; g.fillText(b.text,0,3); }
+    g.restore(); }
 }
 function drawSpeedLines(){
   if(state!=='play'||S.sStun>0) return;
@@ -733,7 +769,7 @@ function frame(now){
   g.setTransform(BASE,0,0,BASE,0,0);
   if(shake>0) g.translate(rnd(-shake,shake)*.5,rnd(-shake,shake)*.5);
   drawScene();
-  drawClapWave(); drawSpeedLines(); ambientSparks(dt); drawFx(dt); drawDanger();
+  drawClapWave(); drawSpeedLines(); ambientSparks(dt); drawFx(dt); drawDanger(); drawBubbles(dt);
   g.setTransform(BASE,0,0,BASE,0,0);
   if(flash>0){ g.fillStyle=`rgba(255,255,255,${Math.min(1,flash*3)})`; g.fillRect(0,0,W,H); }
   drawHUD();
@@ -746,6 +782,7 @@ function tick(dt){
   else if(state==='over'||state==='overShown') updateOver(dt);
   else if(state==='ending'||state==='clearShown') updateEnding(dt);
   shake=Math.max(0,shake-dt*40); flash=Math.max(0,flash-dt);
+  for(const b of bubbles) b.life-=dt;
 }
 // 테스트용 자동 플레이 (#bot)
 function bot(){
@@ -756,9 +793,10 @@ function bot(){
   if(unsafe(want)) want=[0,1,2,3,4,5].find(f=>!unsafe(f));
   if(want===undefined||want===S.face) return;
   if(want===(S.face+3)%6){ tryMove('up'); return; }
-  for(const d of ['left','right']){ const cw=(d==='right')!==lowerHalf(S.face), to=(S.face+(cw?1:5))%6;
-    if(!unsafe(to) && (to===want || Math.abs(((to-want+9)%6)-3)<Math.abs(((S.face-want+9)%6)-3))){ tryMove(d); return; } }
-  tryMove('up');
+  const dist=(a,b)=>{ const d=Math.abs(a-b)%6; return Math.min(d,6-d); };
+  let best=null; for(const d of ['left','right','up']){ const to=moveTarget(S.face,d); if(to<0||unsafe(to)) continue;
+    if(!best||dist(to,want)<dist(best[1],want)) best=[d,to]; }
+  if(best) tryMove(best[0]);
 }
 requestAnimationFrame(frame);
 if(HASH.autostart) startGame();
