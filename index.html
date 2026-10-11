@@ -205,7 +205,7 @@ function musicTick(){
 
 // ================= 상태 =================
 let S=null, state='title', paused=false, tNow=0;
-const parts=[], pops=[], bubbles=[];
+const parts=[], pops=[], bubbles=[], blasts=[];
 const LAST={hulkHead:null, spiderHead:null};
 function say(who,text,life=1,big=false){ for(let i=bubbles.length-1;i>=0;i--) if(bubbles[i].who===who) bubbles.splice(i,1); bubbles.push({who,text,life,max:life,big}); }
 let shake=0, flash=0;
@@ -213,9 +213,9 @@ function newRun(){
   const start = HASH.start ? +HASH.start : CFG.startGap;
   S={t:0, sp:start, hp:start-CFG.startGap, face:0, move:null, landLock:0, sStun:0, stunType:'', hSlow:0, hStun:0, hHold:0, clapped:false, clapT:0,
     rockT:2.5-CFG.rockWarn, itemT:CFG.itemInterval-CFG.itemWarn, itemN:0, rocks:[], items:[], grenades:[], runPh:0, hulkPh:0, lastStep:0,
-    hits:0, booms:0, p4:-1, zoom:0, clapShow:0, introT:0, overT:0, endT:0, phase:0, god:!!HASH.god};
+    hits:0, booms:0, p4:-1, clapShow:0, introT:0, overT:0, endT:0, phase:0, god:!!HASH.god};
   if(HASH.start && start>=phaseAt()[2]) S.clapped=true;
-  camP=S.sp; parts.length=0; pops.length=0; bubbles.length=0;
+  camP=S.sp; parts.length=0; pops.length=0; bubbles.length=0; blasts.length=0;
 }
 newRun();
 
@@ -292,8 +292,7 @@ function updatePlay(dt){
   // 박수치기 (4페이즈 진입 시 1회)
   if(!S.clapped && S.sp>=phaseAt()[2]){ S.clapped=true; S.p4=0; say('hulk','RAAAARGH!',2,true); SFX.roar(); }
   if(S.p4>=0){ S.p4+=dt; if(S.p4>=2 && !S.windup){ S.windup=1; S.hHold=CFG.clapHold; S.clapT=0; SFX.sense('rock'); } }
-  { const tgt=(S.p4>=0 && (S.hHold>0 || S.p4<2 || S.clapShow>0)) ? 1 : 0; S.zoom+=(tgt-S.zoom)*Math.min(1,dt*4); }
-  if(S.clapShow>0) S.clapShow-=dt;
+    if(S.clapShow>0) S.clapShow-=dt;
   if(S.hHold>0){ S.hHold-=dt; S.clapT+=dt;
     if(S.hHold<=0){ S.sStun=Math.max(S.sStun,CFG.clapStun); S.stunType='clap'; shake=22; flash=.25; SFX.clap();
       say('hulk','HULK SMASH!',2,true); S.clapWave=1; S.clapShow=.9;
@@ -324,7 +323,7 @@ function updatePlay(dt){
   for(const r of S.rocks){ if(r.state!=='pending') continue;
     if(grounded && S.face===r.face && S.sp>=r.p-W_ && S.sp<=r.p+W_){ r.state='hit'; S.hits++;
       S.sStun=Math.max(S.sStun,CFG.rockStun); S.stunType='rock'; shake=12; SFX.rockHit();
-      const [x,y]=spiderScreen(); burst(x,y-60,26,{cols:['#8a8f96','#6b7077','#a9aeb4'],up:200}); pop('WHAM!',x,y-150,'#ff5a3a',52); }
+      const [x,y]=spiderScreen(); burst(x,y-60,26,{cols:['#8a8f96','#6b7077','#a9aeb4'],up:200}); pop('BOOM!',x,y-150,'#ff3b30',52); }
     else if(S.sp>r.p+W_) r.state='passed'; }
   for(const it of S.items){ if(it.state!=='pending') continue;
     if(grounded && S.face===it.face && S.sp>=it.p-W_ && S.sp<=it.p+W_){ it.state='got';
@@ -343,8 +342,9 @@ function updatePlay(dt){
   // 수류탄 폭발
   const hz=hulkZ(S.sp-S.hp), [hx,hy]=proj(0,AP-.016*55,hz);
   S.grenades=S.grenades.filter(gr=>{ if(S.hp<gr.p) return true; S.booms++;
-    if(gr.type==='web'){ S.hSlow=CFG.webDur; SFX.web(); pop('SPLAT!',hx,hy-40,'#ffffff',48); burst(hx,hy,24,{cols:['#fff','#dde'],shape:'web',g:200,min:60,max:260}); }
-    else { S.hStun=Math.max(S.hStun,CFG.elecStun); SFX.zap(); pop('SHOCK!',hx,hy-40,'#7fe4ff',48); burst(hx,hy,28,{cols:['#7fe4ff','#fff36a'],shape:'spark',g:0,min:100,max:420,life:.5}); }
+    { const z=Math.max(NEAR+.1,zOf(gr.p)), fp=facePos(gr.face,.16), [bx,by]=proj(fp.x,fp.y,z); blasts.push({type:gr.type,x:bx,y:by,s:F/z,t:0}); }
+    if(gr.type==='web'){ S.hSlow=CFG.webDur; SFX.web(); pop('SPLAT!',hx,hy-110,'#ffffff',48); }
+    else { S.hStun=Math.max(S.hStun,CFG.elecStun); SFX.zap(); pop('SHOCK!',hx,hy-110,'#3ff2c4',48); }
     return false; });
   // 헐크가 돌 부수기
   for(const r of S.rocks){ if(r.state==='passed' && S.hp>=r.p){ r.state='smashed';
@@ -540,7 +540,7 @@ function drawHulk(pose,ph,o={}){
   if(o.web){ g.strokeStyle=`rgba(255,255,255,${.85*o.web})`; g.lineWidth=1.6;
     for(let n=0;n<10;n++){ const a=n/10*Math.PI*2; g.beginPath(); g.moveTo(0,-60); g.lineTo(Math.cos(a)*62,-60+Math.sin(a)*48); g.stroke(); }
     for(const rr of [18,34,50]){ g.beginPath(); for(let n=0;n<=10;n++){ const a=n/10*Math.PI*2; const q=rr*(n%2?.9:1); g.lineTo(Math.cos(a)*q,-60+Math.sin(a)*q*.78); } g.stroke(); } }
-  if(o.zap){ g.lineWidth=2.4; for(let n=0;n<7;n++){ g.strokeStyle=n%2?'#fff36a':'#7fe4ff'; g.beginPath(); let x=rnd(-50,50), y=rnd(-100,-10); g.moveTo(x,y);
+  if(o.zap){ g.lineWidth=2.4; for(let n=0;n<7;n++){ g.strokeStyle=n%2?'#ffffff':'#3ff2c4'; g.beginPath(); let x=rnd(-50,50), y=rnd(-100,-10); g.moveTo(x,y);
     for(let q=0;q<5;q++){ x+=rnd(-16,16); y+=rnd(-16,16); g.lineTo(x,y); } g.stroke(); } }
 }
 // 돌 무더기 (단위 0.01m)
@@ -554,7 +554,7 @@ function drawRock(seed){
 function drawGrenade(type,r,blink){
   if(type==='web'){ circ(0,0,r,'#eef1f4',2.5); g.strokeStyle='#555'; g.lineWidth=1; for(let n=0;n<6;n++){ const a=n/6*Math.PI; g.beginPath(); g.moveTo(-Math.cos(a)*r,-Math.sin(a)*r); g.lineTo(Math.cos(a)*r,Math.sin(a)*r); g.stroke(); }
     g.beginPath(); g.arc(0,0,r*.55,0,Math.PI*2); g.stroke(); g.fillStyle=SRED; g.fillRect(-r,-r*.18,r*2,r*.36); g.strokeStyle='#111'; g.lineWidth=1.5; g.strokeRect(-r,-r*.18,r*2,r*.36); }
-  else { circ(0,0,r,'#2b2f36',2.5); g.fillStyle='#ffd23a'; g.beginPath(); g.moveTo(-r*.15,-r*.8); g.lineTo(r*.45,-r*.1); g.lineTo(r*.05,-r*.05); g.lineTo(r*.2,r*.8); g.lineTo(-r*.45,0); g.lineTo(-r*.05,-r*.05); g.closePath(); g.fill(); g.lineWidth=1; g.strokeStyle='#111'; g.stroke(); }
+  else { circ(0,0,r,'#1d3a36',2.5); g.lineWidth=r*.18; g.strokeStyle='#3ff2c4'; g.beginPath(); g.arc(0,0,r*.78,0,Math.PI*2); g.stroke(); g.fillStyle='#3ff2c4'; g.beginPath(); g.moveTo(-r*.15,-r*.8); g.lineTo(r*.45,-r*.1); g.lineTo(r*.05,-r*.05); g.lineTo(r*.2,r*.8); g.lineTo(-r*.45,0); g.lineTo(-r*.05,-r*.05); g.closePath(); g.fill(); g.lineWidth=1; g.strokeStyle='#111'; g.stroke(); }
   if(blink!==undefined){ circ(0,-r*.95,r*.25,blink?'#ff3030':'#5a1010',1.2); }
 }
 
@@ -573,17 +573,17 @@ function drawScene(){
   else if(state==='intro'){ hz=S.introHz; hpose=S.introHPose; hph=S.hulkPh; }
   else if(state==='over'||state==='overShown'){ hz=hulkZ(0); hpose=S.overHPose||'grab'; ho={hand:S.overHand,lift:S.overLift}; }
   else if(state==='ending'||state==='clearShown'){ hz=S.endHz; hpose=S.endHPose; }
-  else { hz=hulkZ(S.sp-S.hp); hz=lerp(hz,Math.min(hz,4.2),S.zoom); ho.boost=lerp(1,1.25,S.zoom); if(S.p4>=0&&S.p4<2) ho.shout=1; if(S.hHold>0) { hpose='windup'; ho.u=clamp(S.clapT/(CFG.clapHold*.6),0,1); } else if(S.clapShow>0) { hpose='clap'; ho.u=clamp((.9-S.clapShow)/.1,0,1); } }
+  else { hz=hulkZ(S.sp-S.hp); if(S.p4>=0&&S.p4<2) ho.shout=1; if(S.hHold>0) { hpose='windup'; ho.u=clamp(S.clapT/(CFG.clapHold*.6),0,1); } else if(S.clapShow>0) { hpose='clap'; ho.u=clamp((.9-S.clapShow)/.1,0,1); } }
   if(state==='play'){ if(S.hSlow>0) ho.web=Math.min(1,S.hSlow*2); if(S.hStun>0) ho.zap=1; }
   if(state==='intro') list.push({z:5,d:drawIntroWall});
   if(hz!==undefined && S.hulkVisible!==false) list.push({z:hz,d:()=>{ drawHulkAt(hz,hpose,hph,ho); if(ho.web) webStrands(hz); }});
   // 돌/아이템/수류탄
   if(state==='play'||state==='over'||state==='ending'){
     for(const r of S.rocks){ const z=zOf(r.p); if(z<NEAR+.05||z>60) continue; const p=facePos(r.face); list.push({z,d:()=>withAt(p.x,p.y,z,p.r,.01,()=>drawRock(r.seed))}); }
-    for(const it of S.items){ const z=zOf(it.p); if(z<NEAR+.05||z>60) continue; const p=facePos(it.face,.22+Math.sin(tNow*5)*.03);
-      list.push({z,d:()=>withAt(p.x,p.y,z,p.r,.01,()=>{ g.save(); g.globalCompositeOperation='lighter'; circ(0,0,20,it.type==='web'?'rgba(150,200,255,.35)':'rgba(255,230,80,.4)',0); g.restore(); drawGrenade(it.type,11); })}); }
-    for(const gr of S.grenades){ const z=zOf(gr.p); if(z<NEAR+.05) continue; const p=facePos(gr.face,.06);
-      list.push({z,d:()=>withAt(p.x,p.y,z,p.r,.01,()=>drawGrenade(gr.type,8,Math.sin(tNow*12)>0))}); }
+    for(const it of S.items){ const z=zOf(it.p); if(z<NEAR+.05||z>60) continue; const p=facePos(it.face,.32+Math.sin(tNow*5)*.04);
+      list.push({z,d:()=>withAt(p.x,p.y,z,p.r,.01,()=>{ g.save(); g.globalCompositeOperation='lighter'; circ(0,0,40,it.type==='web'?'rgba(150,200,255,.35)':'rgba(63,242,196,.4)',0); g.restore(); drawGrenade(it.type,22); })}); }
+    for(const gr of S.grenades){ const z=zOf(gr.p); if(z<NEAR+.05) continue; const p=facePos(gr.face,.16);
+      list.push({z,d:()=>withAt(p.x,p.y,z,p.r,.01,()=>drawGrenade(gr.type,16,Math.sin(tNow*12)>0))}); }
   }
   // 스파이더맨
   const sp=currentSpider();
@@ -611,12 +611,12 @@ function updateIntro(dt){
   S.hulkVisible=T>=1.9;
   S.introHPose='roar'; S.introHz=Zw;
   if(T<.8){ shake=Math.max(shake,T*8); S.introSp=null; if(Math.floor(T*5)!==Math.floor((T-dt)*5)) SFX.step(.7); }
-  else if(T<1.5){ if(!S.burst1){ S.burst1=1; SFX.crash(); shake=16; const [x,y]=proj(0,0,Zw); burst(x,y,40,{cols:['#8a6b55','#a07e62','#6c5444'],min:150,max:600,s0:4,s1:14}); pop('CRASH!',x,y-90,'#ffd23a',64,1); }
+  else if(T<1.5){ if(!S.burst1){ S.burst1=1; SFX.crash(); shake=16; const [x,y]=proj(0,0,Zw); burst(x,y,40,{cols:['#8a6b55','#a07e62','#6c5444'],min:150,max:600,s0:4,s1:14}); pop('CRASH!',x,y-90,'#ff3b30',64,1); }
     const u=(T-.8)/.7, e=1-(1-u)*(1-u); S.introSp={x:0,y:lerp(0,AP,e),z:lerp(Zw,ZS,e),r:e*Math.PI*4,pose:'tuck',ph:0,o:{}}; }
   else { S.introSp={x:0,y:AP,z:ZS,r:0,pose:T<1.9?'land':T<2.9?'idle':'run',ph:S.runPh,o:{}}; if(!S.landed){ S.landed=1; shake=8; SFX.step(1); } }
   if(T>=1.9 && !S.burst2){ S.burst2=1; SFX.crash(); setTimeout(()=>SFX.roar(),150); shake=20; const [x,y]=proj(0,0,Zw); burst(x,y,40,{cols:['#8a6b55','#a07e62','#6c5444'],min:150,max:600,s0:4,s1:14}); say('hulk','HULK SMASH!',2,true); }
   if(T>=2.9){ const u=clamp((T-2.9)/1,0,1), e=ease(u); S.introHz=lerp(Zw,hulkZ(CFG.startGap),e); S.introHPose='run'; S.hulkPh+=dt*9; S.runPh+=dt*16;
-    camP=S.sp-6*(1-e); if(!S.goPop){ S.goPop=1; pop('RUN!',CX,150,'#ff4040',90,1); } }
+    camP=S.sp-6*(1-e); if(!S.goPop){ S.goPop=1; say('spider','RUN!'); } }
   if(T>=3.9){ state='play'; camP=S.sp; S.hulkVisible=true; }
 }
 function drawIntroWall(){
@@ -670,7 +670,7 @@ function updateEnding(dt){
     sp={x:lerp(0,.05,u),y:lerp(AP,.25,u),z:lerp(ZS,hz-.15,u),r:0,pose:'punch',ph:0,o:{glow:1}}; }
   else { const u=clamp((T-1.9)/1.2,0,1); hpose='jawhit'; hz=lerp(hulkZ(.3),30,ease(u));
     const v=clamp((T-1.9)/.6,0,1); sp={x:lerp(.05,0,v),y:lerp(.25,AP,v*v),z:lerp(hulkZ(.3)-.15,ZS,v),r:0,pose:v<1?'punch':'back',ph:0,o:{glow:1-v}};
-    if(!S.powed){ S.powed=1; flash=.35; shake=28; SFX.pow(); const [x,y]=proj(0,AP-.016*80,hulkZ(.3)); pop('WHAM!',x,y-40,'#ffd23a',110,2);
+    if(!S.powed){ S.powed=1; flash=.35; shake=28; SFX.pow(); const [x,y]=proj(0,AP-.016*80,hulkZ(.3)); pop('WHAM!',x,y-40,'#111111',110,2);
       burst(x,y,40,{cols:['#7fe4ff','#fff36a','#ffffff'],shape:'spark',g:0,min:150,max:700,life:.7}); }
     if(T>3.1){ hpose='stand'; if(!S.thud){ S.thud=1; SFX.crash(); shake=10; } } }
   S.endHz=hz; S.endHPose=hpose; S.endSpider=sp;
@@ -693,7 +693,23 @@ function drawHUD(){
 }
 function drawHeadIcon(){ ell(0,-30,24,29,0,SRED,4); for(const s of [-1,1]){ g.save(); g.translate(s*11,-33); g.rotate(s*.45); g.beginPath(); g.ellipse(0,0,10,7,0,0,Math.PI*2); g.fillStyle='#fff'; g.fill(); g.lineWidth=4; g.strokeStyle='#111'; g.stroke(); g.restore(); } }
 function rr(x,y,w,h,r){ g.beginPath(); g.roundRect?g.roundRect(x,y,w,h,r):g.rect(x,y,w,h); }
+function drawBlasts(dt){
+  for(let i=blasts.length-1;i>=0;i--){ const b=blasts[i]; b.t+=dt; const D=b.type==='web'?.7:.6; if(b.t>=D){ blasts.splice(i,1); continue; }
+    const u=b.t/D, e=1-(1-u)*(1-u), R=Math.max(b.s*1.3,95)*e, a=1-u; b.s=Math.max(b.s,75);
+    g.save(); g.translate(b.x,b.y); g.lineCap='round';
+    if(b.type==='web'){ g.strokeStyle=`rgba(255,255,255,${a})`; g.lineWidth=Math.max(1.2,b.s*.012);
+      for(let n=0;n<12;n++){ const an=n/12*Math.PI*2; g.beginPath(); g.moveTo(0,0); g.lineTo(Math.cos(an)*R,Math.sin(an)*R); g.stroke(); }
+      for(const k of [.3,.55,.8,1]){ g.beginPath(); for(let n=0;n<=12;n++){ const an=n/12*Math.PI*2, rr=R*k*(n%2?.92:1); g.lineTo(Math.cos(an)*rr,Math.sin(an)*rr); } g.stroke(); }
+      if(u<.25) circ(0,0,b.s*.16*(1-u*4),'#fff',0); }
+    else { g.globalCompositeOperation='lighter'; g.lineWidth=Math.max(1.5,b.s*.016);
+      for(let n=0;n<10;n++){ const an=n/10*Math.PI*2+u; g.strokeStyle=n%2?`rgba(255,255,255,${a})`:`rgba(63,242,196,${a})`; g.beginPath(); g.moveTo(0,0);
+        for(let q=1;q<=5;q++){ const rr=R*q/5, j=(Math.random()-.5)*b.s*.12; g.lineTo(Math.cos(an)*rr-Math.sin(an)*j,Math.sin(an)*rr+Math.cos(an)*j); } g.stroke(); }
+      g.strokeStyle=`rgba(63,242,196,${a})`; g.lineWidth=Math.max(2,b.s*.03*a); g.beginPath(); g.arc(0,0,R,0,Math.PI*2); g.stroke();
+      if(u<.25){ g.fillStyle=`rgba(200,255,240,${1-u*4})`; g.beginPath(); g.arc(0,0,b.s*.2,0,Math.PI*2); g.fill(); } }
+    g.restore(); }
+}
 function drawFx(dt){
+  drawBlasts(dt);
   for(let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.life-=dt; if(p.life<=0){ parts.splice(i,1); continue; }
     p.vy+=p.g*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.rot+=dt*5; const a=clamp(p.life*2,0,1);
     g.save(); g.globalAlpha=a; g.translate(p.x,p.y); g.rotate(p.rot);
@@ -707,8 +723,8 @@ function drawFx(dt){
     g.font=`${p.size}px Bangers, Impact, sans-serif`; g.textAlign='center'; g.textBaseline='middle';
     const w=g.measureText(p.txt).width;
     g.beginPath(); for(let n=0;n<16;n++){ const a=n/16*Math.PI*2, r=(n%2?.62:.8); g.lineTo(Math.cos(a)*(w*r+14),Math.sin(a)*(p.size*r+10)); } g.closePath();
-    g.fillStyle='rgba(20,20,20,.85)'; g.fill();
-    g.lineJoin='round'; g.lineWidth=8; g.strokeStyle='#111'; g.strokeText(p.txt,0,0); g.fillStyle=p.col; g.fillText(p.txt,0,0); g.restore(); }
+    const dark=p.col==='#111111'; g.fillStyle=dark?'#ffffff':'rgba(20,20,20,.85)'; g.fill(); if(dark){ g.lineWidth=4; g.strokeStyle='#111'; g.stroke(); }
+    g.lineJoin='round'; g.lineWidth=8; g.strokeStyle=dark?'#fff':'#111'; g.strokeText(p.txt,0,0); g.fillStyle=p.col; g.fillText(p.txt,0,0); g.restore(); }
 }
 function drawBubbles(dt){
   for(let i=bubbles.length-1;i>=0;i--){ const b=bubbles[i]; if(b.life<=0){ bubbles.splice(i,1); continue; }
