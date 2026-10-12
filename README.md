@@ -1,6 +1,6 @@
 # Spider-Man_BrandNewDay_aScene
 
-영화 「스파이더맨: 브랜드 뉴 데이」에서 헐크가 좁은 복도로 스파이더맨을 쫓는 장면을 오마주한 웹 게임 (팬 메이드, 비상업)
+> 영화 「스파이더맨: 브랜드 뉴 데이」에서 헐크가 좁은 복도로 스파이더맨을 쫓는 장면을 오마주한 웹 게임 (팬 메이드, 비상업)
 
 ▶ **플레이:** https://kimbyeonghoon51.github.io/Spider-Man_BrandNewDay_aScene/
 
