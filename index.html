@@ -53,8 +53,8 @@
 
   <div id="title" class="ov">
     <div class="logo">SPIDER-MAN<small>BRAND NEW DAY</small></div>
-    <div class="sub">헐크가 쫓아온다! 복도 끝 <b style="color:#ffd23a">100m</b>까지 달려라</div>
-    <div><button class="btn" id="bStart">시작</button><button class="btn blue small" id="bBal">밸런스 설정</button></div>
+    <div style="height:26px"></div>
+    <div><button class="btn" id="bStart">시작</button><button class="btn blue small hidden" id="bBal">밸런스 설정</button></div>
   </div>
 
   <div id="helpBox" class="ov hidden" style="background:rgba(0,0,0,.7);z-index:7">
@@ -347,17 +347,19 @@ function updatePlay(dt){
     const ph=phaseOf(S.sp); S.phase=ph; MUS.lvl=ph;
     if(S.rockT<=0){ S.rockT+=FIX.rockInterval[ph];
       const p=S.sp+CFG.rockWarn*CFG.spiderSpeed;
-      const busy=S.items.filter(i=>i.state==='pending'&&Math.abs(i.p-p)<.7).map(i=>i.face);
-      const faces=shuffle([0,1,2,3,4,5].filter(f=>!busy.includes(f))).slice(0,FIX.rockFaces[ph]);
-      faces.forEach(f=>S.rocks.push({p,face:f,state:'pending',warn:CFG.rockWarn,seed:Math.random()*1000}));
-      playSnd('sense',()=>SFX.sense('rock')); }
+      if(p<CFG.goal-.3){
+        const busy=S.items.filter(i=>i.state==='pending'&&Math.abs(i.p-p)<.7).map(i=>i.face);
+        const faces=shuffle([0,1,2,3,4,5].filter(f=>!busy.includes(f))).slice(0,FIX.rockFaces[ph]);
+        faces.forEach(f=>S.rocks.push({p,face:f,state:'pending',warn:CFG.rockWarn,seed:Math.random()*1000}));
+        playSnd('sense',()=>SFX.sense('rock')); } }
     if(S.itemT<=0){ S.itemT+=FIX.itemInterval; S.itemN++;
       const type=S.itemN===1?'web':S.itemN===2?'elec':(Math.random()<.5?'web':'elec');
       const p=S.sp+CFG.itemWarn*CFG.spiderSpeed;
-      const busy=S.rocks.filter(r=>r.state==='pending'&&Math.abs(r.p-p)<.7).map(r=>r.face);
-      const free=[0,1,2,3,4,5].filter(f=>!busy.includes(f));
-      S.items.push({p,face:free[Math.floor(Math.random()*free.length)],type,state:'pending',warn:CFG.itemWarn});
-      playSnd('sense',()=>SFX.sense('item')); }
+      if(p<CFG.goal-.3){
+        const busy=S.rocks.filter(r=>r.state==='pending'&&Math.abs(r.p-p)<.7).map(r=>r.face);
+        const free=[0,1,2,3,4,5].filter(f=>!busy.includes(f));
+        S.items.push({p,face:free[Math.floor(Math.random()*free.length)],type,state:'pending',warn:CFG.itemWarn});
+        playSnd('sense',()=>SFX.sense('item')); } }
   }
   const grounded=!S.move, W_=FIX.hitWin;
   for(const r of S.rocks){ if(r.state!=='pending') continue;
@@ -637,7 +639,7 @@ function drawScene(){
 function webStrands(hz){ const [cx,cy]=proj(0,AP-.016*60,hz); g.strokeStyle='rgba(255,255,255,.75)'; g.lineWidth=clamp(6/hz,.6,3);
   for(const j of [0,1,2,3,4,5]){ const [x,y]=vtx(j,hz+.3); g.beginPath(); g.moveTo(cx,cy); g.quadraticCurveTo((cx+x)/2,(cy+y)/2+10,x,y); g.stroke(); } }
 function currentSpider(){
-  if(state==='title') return {x:0,y:AP,z:ZS,r:0,pose:'idle',ph:0,o:{}};
+  if(state==='title') return {x:0,y:AP,z:ZS,r:0,pose:'run',ph:tNow*11,o:{}};
   if(state==='intro') return S.introSp;
   if(state==='over'||state==='overShown') return S.overSpider;
   if(state==='ending'||state==='clearShown') return S.endSpider;
@@ -851,6 +853,8 @@ function bot(){
 requestAnimationFrame(frame);
 if(HASH.autostart) startGame();
 if(HASH.help) openHelp();
+// 밸런스 설정은 주소 뒤에 #balance 를 붙였을 때만
+if(HASH.balance){ show('bBal',true); buildBal(); show('balance',true); }
 if(HASH.sim){ startGame(); const n=Math.round(+HASH.sim*60); for(let i=0;i<n;i++){ tick(1/60); if(i%6===0) drawFx(1/10); } document.title=`state=${state} sp=${S.sp.toFixed(1)} hp=${S.hp.toFixed(1)} t=${S.t.toFixed(1)} hits=${S.hits} booms=${S.booms}`; }
 </script>
 </body>
