@@ -21,5 +21,6 @@
 주소 뒤에 `#hulkSpeed=1.5` 처럼 붙여도 됩니다. 테스트용: `#god` `#start=75` `#bot` `#sim=초`
 
 ## 제작
-- 단일 `index.html` (Canvas 2D, 외부 라이브러리 없음), 효과음·배경음은 Web Audio로 합성
+- `index.html` (Canvas 2D, 외부 라이브러리 없음) + `sounds.js` (사용자 제공 효과음 5종: 거미줄·전기 수류탄 폭발, HULK SMASH!, 돌 충돌, 스파이더 센스)
+- 그 밖의 효과음과 배경음은 Web Audio로 합성
 - Spider-Man, Hulk는 Marvel의 캐릭터입니다. 이 게임은 비상업 팬 오마주입니다.

@@ -29,6 +29,12 @@
   .big{font-family:Bangers,Impact,sans-serif;font-size:110px;-webkit-text-stroke:4px #111;text-shadow:6px 6px 0 #111}
   .stat{font-size:22px;margin:4px 0 18px;text-shadow:2px 2px 0 #000;line-height:1.6}
   #ui{position:absolute;right:10px;top:8px;display:flex;gap:6px;z-index:5}
+  .helpPanel{background:#14191f;border:4px solid #111;border-radius:16px;box-shadow:0 8px 0 #000;padding:14px 30px 18px;max-width:640px;text-align:left;font-family:sans-serif}
+  .helpPanel h3{margin:10px 0 4px;font-family:"Black Han Sans",sans-serif;font-size:21px;color:#ffd23a}
+  .helpPanel p{margin:0 0 4px;font-size:15px;line-height:1.65;color:#e4ecf2}
+  .helpPanel p b{color:#ffd23a}
+  .helpPanel .dim{color:#9fb0bf;font-size:13px}
+  .helpPanel .btn{display:block;margin:12px auto 0}
   #ui button{width:40px;height:40px;font-size:20px;border-radius:10px;border:3px solid #111;background:#f5f5f5;cursor:pointer;padding:0}
   #balance{position:absolute;inset:40px 160px;background:#14191f;border:4px solid #111;border-radius:16px;box-shadow:0 8px 0 #000;
     padding:16px 22px;font-family:sans-serif;font-size:15px;overflow:auto;text-align:left;z-index:6}
@@ -43,16 +49,28 @@
 <body>
 <div id="stage">
   <canvas id="cv"></canvas>
-  <div id="ui"><button id="bMute" title="음소거 (M)">🔊</button><button id="bPause" title="일시정지 (P)">⏸</button></div>
+  <div id="ui"><button id="bMute" title="음소거 (M)">🔊</button><button id="bPause" title="일시정지 (P)">⏸</button><button id="bHelp" title="조작법 (H)">?</button></div>
 
   <div id="title" class="ov">
     <div class="logo">SPIDER-MAN<small>BRAND NEW DAY</small></div>
     <div class="sub">헐크가 쫓아온다! 복도 끝 <b style="color:#ffd23a">100m</b>까지 달려라</div>
     <div><button class="btn" id="bStart">시작</button><button class="btn blue small" id="bBal">밸런스 설정</button></div>
-    <div class="help">
-      <b>← →</b> 옆 면으로 점프 &nbsp; <b>↑ ↓</b> 맞은편 면으로 덤블링 &nbsp; <span id="touchHint">(모바일: 스와이프)</span><br>
-      스파이더 센스: <span class="red">붉게 깜빡</span> = 1초 뒤 돌 무더기 &nbsp; <span class="bluec">파랗게 깜빡</span> = 2초 뒤 아이템<br>
-      수류탄을 먹으면 그 자리에 설치 → 헐크가 밟으면 폭발 (거미줄 = 감속, 전기 = 기절)
+  </div>
+
+  <div id="helpBox" class="ov hidden" style="background:rgba(0,0,0,.7);z-index:7">
+    <div class="helpPanel">
+      <h3>조작법</h3>
+      <p><b>← →</b> 육각형을 따라 옆 면으로 점프 (같은 방향 6번 = 한 바퀴)<br><b>↑ ↓</b> 맞은편 면으로 덤블링<br>
+        <span class="dim">모바일: 좌우·위아래로 스와이프 &nbsp;·&nbsp; M 음소거 &nbsp;·&nbsp; P / Esc 일시정지</span></p>
+      <h3>스파이더 센스</h3>
+      <p><span class="red">붉게 깜빡</span> → 1초 뒤 그 면에 돌 무더기 (부딪히면 1초 기절)<br>
+        <span class="bluec">파랗게 깜빡</span> → 2초 뒤 그 면에 아이템</p>
+      <h3>아이템</h3>
+      <p>수류탄을 먹으면 그 자리에 설치되고, 헐크가 밟으면 터져요.<br>
+        <b style="color:#fff">거미줄 수류탄</b> 헐크 속도 감소 &nbsp;·&nbsp; <b style="color:#3ff2c4">전기 수류탄</b> 헐크 기절</p>
+      <h3>목표</h3>
+      <p>헐크에게 잡히지 않고 복도 끝 <b>100m</b>까지 달리기</p>
+      <button class="btn small" id="bHelpClose">닫기</button>
     </div>
   </div>
 
@@ -83,6 +101,7 @@
 </div>
 <div id="rotate">가로 화면으로 돌려주세요 ↻</div>
 
+<script src="sounds.js"></script>
 <script>
 'use strict';
 // ================= 설정 =================
@@ -142,6 +161,9 @@ function auInit(){
   for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
   AU.noise=n;
   setInterval(musicTick,25);
+  AU.buf={};
+  for(const k in (window.SND_DATA||{})){ const b=Uint8Array.from(atob(SND_DATA[k]),c=>c.charCodeAt(0)).buffer;
+    C.decodeAudioData(b,a=>{ AU.buf[k]=a; },()=>{}); }
 }
 function setMute(m){ AU.muted=m; try{localStorage.setItem('bnd_mute',m?'1':'0');}catch(e){}
   if(AU.master) AU.master.gain.value=m?0:.8; document.getElementById('bMute').textContent=m?'🔇':'🔊'; }
@@ -158,6 +180,10 @@ function noise(o){ if(!AU.ctx) return; const C=AU.ctx, t=C.currentTime+(o.t||0);
   fl.frequency.setValueAtTime(o.f||1000,t); if(o.f2) fl.frequency.exponentialRampToValueAtTime(o.f2,t+(o.dur||.3));
   fl.Q.value=o.q||1; const gn=C.createGain(); s.connect(fl); fl.connect(gn); gn.connect(o.dest||AU.sfx);
   env(gn,t,o.att||.005,o.dur||.3,o.vol||.3); s.start(t,Math.random()*1.5); s.stop(t+(o.dur||.3)+.05); }
+// 사용자 제공 음원 재생 (불러오기 전이면 합성음으로 대체)
+const SND_VOL={web:1.6,elec:.8,hulk:.9,rock:.8,sense:.7};
+function playSnd(k,fallback){ if(!AU.ctx) return; const b=AU.buf&&AU.buf[k]; if(!b){ if(fallback) fallback(); return; }
+  const s=AU.ctx.createBufferSource(), gn=AU.ctx.createGain(); s.buffer=b; gn.gain.value=SND_VOL[k]||1; s.connect(gn); gn.connect(AU.sfx); s.start(); }
 const SFX={
   jump(){ noise({ft:'bandpass',f:800,f2:3000,dur:.22,vol:.25,q:2}); tone({f:1400,f2:500,dur:.12,vol:.12,type:'triangle'}); },
   tumble(){ noise({ft:'bandpass',f:500,f2:2500,dur:.45,vol:.3,q:1.5}); noise({ft:'bandpass',f:2500,f2:600,dur:.4,vol:.2,q:1.5,t:.1}); },
@@ -237,6 +263,9 @@ const KEYS={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',Ke
 addEventListener('keydown',e=>{
   if(KEYS[e.code]){ e.preventDefault(); if(!e.repeat) tryMove(KEYS[e.code]); return; }
   if(e.code==='KeyM') setMute(!AU.muted);
+  const helpOpen=!$('helpBox').classList.contains('hidden');
+  if(e.code==='KeyH'){ helpOpen?closeHelp():openHelp(); return; }
+  if(helpOpen){ if(e.code==='Escape'||e.code==='Enter'||e.code==='Space'){ e.preventDefault(); closeHelp(); } return; }
   if(e.code==='KeyP'||e.code==='Escape') togglePause();
   if(e.code==='Enter'||e.code==='Space'){
     if(state==='title' && document.getElementById('balance').classList.contains('hidden')) startGame();
@@ -248,7 +277,6 @@ stage.addEventListener('touchstart',e=>{ const t=e.changedTouches[0]; tStart={x:
 stage.addEventListener('touchend',e=>{ if(!tStart) return; const t=e.changedTouches[0], dx=t.clientX-tStart.x, dy=t.clientY-tStart.y; tStart=null;
   if(Math.max(Math.abs(dx),Math.abs(dy))<24) return;
   if(Math.abs(dx)>Math.abs(dy)) tryMove(dx>0?'right':'left'); else tryMove(dy<0?'up':'down'); },{passive:true});
-if(!('ontouchstart' in window)) document.getElementById('touchHint').style.display='none';
 
 const $=id=>document.getElementById(id);
 function show(id,on){ $(id).classList.toggle('hidden',!on); }
@@ -266,6 +294,12 @@ function togglePause(){
 $('bStart').onclick=startGame; $('bRetry').onclick=startGame; $('bRetry2').onclick=startGame;
 $('bTitle1').onclick=toTitle; $('bTitle2').onclick=toTitle; $('bQuit').onclick=toTitle;
 $('bResume').onclick=togglePause; $('bPause').onclick=togglePause;
+let helpPaused=false;
+function openHelp(){ if($('helpBox').classList.contains('hidden')===false) return;
+  if(['play','intro'].includes(state) && !paused){ paused=true; helpPaused=true; if(AU.ctx) AU.ctx.suspend(); }
+  show('helpBox',true); }
+function closeHelp(){ show('helpBox',false); if(helpPaused){ helpPaused=false; paused=false; if(AU.ctx) AU.ctx.resume(); } }
+$('bHelp').onclick=openHelp; $('bHelpClose').onclick=closeHelp;
 $('bMute').onclick=()=>{ auInit(); setMute(!AU.muted); }; setMute(AU.muted);
 // 밸런스 패널
 function buildBal(){
@@ -291,10 +325,10 @@ function updatePlay(dt){
   S.t+=dt;
   // 박수치기 (4페이즈 진입 시 1회)
   if(!S.clapped && S.sp>=phaseAt()[2]){ S.clapped=true; S.p4=0; say('hulk','RAAAARGH!',2,true); SFX.roar(); }
-  if(S.p4>=0){ S.p4+=dt; if(S.p4>=2 && !S.windup){ S.windup=1; S.hHold=CFG.clapHold; S.clapT=0; SFX.sense('rock'); } }
+  if(S.p4>=0){ S.p4+=dt; if(S.p4>=2 && !S.windup){ S.windup=1; S.hHold=CFG.clapHold; S.clapT=0; playSnd('sense',()=>SFX.sense('rock')); } }
     if(S.clapShow>0) S.clapShow-=dt;
   if(S.hHold>0){ S.hHold-=dt; S.clapT+=dt;
-    if(S.hHold<=0){ S.sStun=Math.max(S.sStun,CFG.clapStun); S.stunType='clap'; shake=22; flash=.25; SFX.clap();
+    if(S.hHold<=0){ S.sStun=Math.max(S.sStun,CFG.clapStun); S.stunType='clap'; shake=22; flash=.25; SFX.clap(); playSnd('hulk');
       say('hulk','HULK SMASH!',2,true); S.clapWave=1; S.clapShow=.9;
       if(S.move){ S.face=S.move.to; S.move=null; } } }
   // 스파이더맨
@@ -310,19 +344,19 @@ function updatePlay(dt){
       const busy=S.items.filter(i=>i.state==='pending'&&Math.abs(i.p-p)<.7).map(i=>i.face);
       const faces=shuffle([0,1,2,3,4,5].filter(f=>!busy.includes(f))).slice(0,FIX.rockFaces[ph]);
       faces.forEach(f=>S.rocks.push({p,face:f,state:'pending',warn:CFG.rockWarn,seed:Math.random()*1000}));
-      SFX.sense('rock'); }
+      playSnd('sense',()=>SFX.sense('rock')); }
     if(S.itemT<=0){ S.itemT+=FIX.itemInterval; S.itemN++;
       const type=S.itemN===1?'web':S.itemN===2?'elec':(Math.random()<.5?'web':'elec');
       const p=S.sp+CFG.itemWarn*CFG.spiderSpeed;
       const busy=S.rocks.filter(r=>r.state==='pending'&&Math.abs(r.p-p)<.7).map(r=>r.face);
       const free=[0,1,2,3,4,5].filter(f=>!busy.includes(f));
       S.items.push({p,face:free[Math.floor(Math.random()*free.length)],type,state:'pending',warn:CFG.itemWarn});
-      SFX.sense('item'); }
+      playSnd('sense',()=>SFX.sense('item')); }
   }
   const grounded=!S.move, W_=FIX.hitWin;
   for(const r of S.rocks){ if(r.state!=='pending') continue;
     if(grounded && S.face===r.face && S.sp>=r.p-W_ && S.sp<=r.p+W_){ r.state='hit'; S.hits++;
-      S.sStun=Math.max(S.sStun,CFG.rockStun); S.stunType='rock'; shake=12; SFX.rockHit();
+      S.sStun=Math.max(S.sStun,CFG.rockStun); S.stunType='rock'; shake=12; playSnd('rock',SFX.rockHit);
       const [x,y]=spiderScreen(); burst(x,y-60,26,{cols:['#8a8f96','#6b7077','#a9aeb4'],up:200}); pop('BOOM!',x,y-150,'#ff3b30',52); }
     else if(S.sp>r.p+W_) r.state='passed'; }
   for(const it of S.items){ if(it.state!=='pending') continue;
@@ -343,8 +377,8 @@ function updatePlay(dt){
   const hz=hulkZ(S.sp-S.hp), [hx,hy]=proj(0,AP-.016*55,hz);
   S.grenades=S.grenades.filter(gr=>{ if(S.hp<gr.p) return true; S.booms++;
     { const z=Math.max(NEAR+.1,zOf(gr.p)), fp=facePos(gr.face,.16), [bx,by]=proj(fp.x,fp.y,z); blasts.push({type:gr.type,x:bx,y:by,s:F/z,t:0}); }
-    if(gr.type==='web'){ S.hSlow=CFG.webDur; SFX.web(); pop('SPLAT!',hx,hy-110,'#ffffff',48); }
-    else { S.hStun=Math.max(S.hStun,CFG.elecStun); SFX.zap(); pop('SHOCK!',hx,hy-110,'#3ff2c4',48); }
+    if(gr.type==='web'){ S.hSlow=CFG.webDur; playSnd('web',SFX.web); pop('SPLAT!',hx,hy-110,'#ffffff',48); }
+    else { S.hStun=Math.max(S.hStun,CFG.elecStun); playSnd('elec',SFX.zap); pop('SHOCK!',hx,hy-110,'#3ff2c4',48); }
     return false; });
   // 헐크가 돌 부수기
   for(const r of S.rocks){ if(r.state==='passed' && S.hp>=r.p){ r.state='smashed';
@@ -357,7 +391,7 @@ function updatePlay(dt){
   if(S.clapWave) S.clapWave=Math.max(0,S.clapWave-dt*1.4);
   // 승패
   if(S.sp>=CFG.goal){ state='ending'; S.endT=0; S.endGap0=Math.max(1.5,S.sp-S.hp); S.move=null; S.sStun=0; musicStop(); return; }
-  if(S.hp>=S.sp && !S.god){ state='over'; S.overT=0; S.overSp=S.sp; S.overFace=S.face; S.overPose=spiderPose(); S.move=null; musicStop(); SFX.roar(); }
+  if(S.hp>=S.sp && !S.god){ state='over'; S.overT=0; S.overSp=S.sp; S.overFace=S.face; S.overPose=spiderPose(); S.move=null; musicStop(); }
 }
 
 // ================= 스파이더맨 위치 =================
@@ -481,8 +515,9 @@ function drawSpider(pose,ph,o={}){
   // 앞으로 나온 팔
   [[0,-1],[1,1]].forEach(([i,s])=>{ if(armK[i]>=0 || (back&&i===1)) arm(i,s); });
   // 스파이더 센스
-  if(o.sense){ g.strokeStyle='#111'; g.lineWidth=2.2; for(let n=0;n<6;n++){ const a=-Math.PI*.95+n/5*Math.PI*.9, r0=17+Math.sin(tNow*30+n)*1.5;
-    g.beginPath(); for(let q=0;q<=6;q++){ const r=r0+q*2.2, w=(q%2?1.8:-1.8); g.lineTo(Math.cos(a)*r+Math.cos(a+1.57)*w,-89+Math.sin(a)*r+Math.sin(a+1.57)*w); } g.stroke(); } }
+  if(o.sense){ for(const [col,lw] of [['#111',6],['#fff',3]]){ g.strokeStyle=col; g.lineWidth=lw;
+    for(let n=0;n<7;n++){ const a=-Math.PI*.97+n/6*Math.PI*.94, r0=18+Math.sin(tNow*30+n)*2;
+      g.beginPath(); for(let q=0;q<=7;q++){ const r=r0+q*3.4, w=(q%2?2.8:-2.8); g.lineTo(Math.cos(a)*r+Math.cos(a+1.57)*w,-89+Math.sin(a)*r+Math.sin(a+1.57)*w); } g.stroke(); } } }
   if(pose==='stun'){ for(let n=0;n<3;n++){ const a=tNow*6+n*2.1; star(Math.cos(a)*14,-108+Math.sin(a)*4,4.5); } }
 }
 function star(x,y,r){ g.beginPath(); for(let i=0;i<10;i++){ const a=i/10*Math.PI*2-Math.PI/2, rr=i%2?r*.45:r; g.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr); } g.closePath();
@@ -614,7 +649,7 @@ function updateIntro(dt){
   else if(T<1.5){ if(!S.burst1){ S.burst1=1; SFX.crash(); shake=16; const [x,y]=proj(0,0,Zw); burst(x,y,40,{cols:['#8a6b55','#a07e62','#6c5444'],min:150,max:600,s0:4,s1:14}); pop('CRASH!',x,y-90,'#ff3b30',64,1); }
     const u=(T-.8)/.7, e=1-(1-u)*(1-u); S.introSp={x:0,y:lerp(0,AP,e),z:lerp(Zw,ZS,e),r:e*Math.PI*4,pose:'tuck',ph:0,o:{}}; }
   else { S.introSp={x:0,y:AP,z:ZS,r:0,pose:T<1.9?'land':T<2.9?'idle':'run',ph:S.runPh,o:{}}; if(!S.landed){ S.landed=1; shake=8; SFX.step(1); } }
-  if(T>=1.9 && !S.burst2){ S.burst2=1; SFX.crash(); setTimeout(()=>SFX.roar(),150); shake=20; const [x,y]=proj(0,0,Zw); burst(x,y,40,{cols:['#8a6b55','#a07e62','#6c5444'],min:150,max:600,s0:4,s1:14}); say('hulk','HULK SMASH!',2,true); }
+  if(T>=1.9 && !S.burst2){ S.burst2=1; SFX.crash(); playSnd('hulk',SFX.roar); shake=20; const [x,y]=proj(0,0,Zw); burst(x,y,40,{cols:['#8a6b55','#a07e62','#6c5444'],min:150,max:600,s0:4,s1:14}); say('hulk','HULK SMASH!',2,true); }
   if(T>=2.9){ const u=clamp((T-2.9)/1,0,1), e=ease(u); S.introHz=lerp(Zw,hulkZ(CFG.startGap),e); S.introHPose='run'; S.hulkPh+=dt*9; S.runPh+=dt*16;
     camP=S.sp-6*(1-e); if(!S.goPop){ S.goPop=1; say('spider','RUN!'); } }
   if(T>=3.9){ state='play'; camP=S.sp; S.hulkVisible=true; }
@@ -649,9 +684,8 @@ function updateOver(dt){
   S.overHand=hand; S.overLift=lift;
   if(T>=1.1 && !S.slammed){ S.slammed=1; shake=26; flash=.15; SFX.slam(); const hs=hulkLocalToScreen(6,0,hz);
     burst(hs[0],hs[1],40,{cols:['#8a8f96','#b9bec4','#6b7077'],up:250,min:100,max:500}); }
-  if(T>=.35 && !S.saidSmash){ S.saidSmash=1; say('hulk','HULK SMASH!',2,true); }
+  if(T>=.35 && !S.saidSmash){ S.saidSmash=1; say('hulk','HULK SMASH!',2,true); playSnd('hulk',SFX.roar); }
   if(T>=1.25) S.overHPose='roar';
-  if(T>=1.4 && !S.roared){ S.roared=1; SFX.roar(); }
   // 스파이더맨을 화면 좌표로 직접 그리기 위해 역투영
   S.overSpider={x:(sx-CX)*z/F,y:(sy-CY)*z/F,z,r,pose,ph:0,o:{}};
   if(T>=2.4 && state==='over'){ state='overShown'; SFX.over();
@@ -810,6 +844,7 @@ function bot(){
 }
 requestAnimationFrame(frame);
 if(HASH.autostart) startGame();
+if(HASH.help) openHelp();
 if(HASH.sim){ startGame(); const n=Math.round(+HASH.sim*60); for(let i=0;i<n;i++){ tick(1/60); if(i%6===0) drawFx(1/10); } document.title=`state=${state} sp=${S.sp.toFixed(1)} hp=${S.hp.toFixed(1)} t=${S.t.toFixed(1)} hits=${S.hits} booms=${S.booms}`; }
 </script>
 </body>
