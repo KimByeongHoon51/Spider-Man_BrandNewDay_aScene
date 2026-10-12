@@ -1,3 +1,4 @@
 *.png
 기획정리.md
 *.mp3
+!BGM.mp3

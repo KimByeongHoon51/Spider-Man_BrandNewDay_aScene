@@ -63,13 +63,14 @@
       <p><b>← →</b> 육각형을 따라 옆 면으로 점프 (같은 방향 6번 = 한 바퀴)<br><b>↑ ↓</b> 맞은편 면으로 덤블링<br>
         <span class="dim">모바일: 좌우·위아래로 스와이프 &nbsp;·&nbsp; M 음소거 &nbsp;·&nbsp; P / Esc 일시정지</span></p>
       <h3>스파이더 센스</h3>
-      <p><span class="red">붉게 깜빡</span> → 1초 뒤 그 면에 돌 무더기 (부딪히면 1초 기절)<br>
+      <p><span class="red">붉게 깜빡</span> → 2초 뒤 그 면에 돌 무더기 (부딪히면 1초 기절)<br>
         <span class="bluec">파랗게 깜빡</span> → 2초 뒤 그 면에 아이템</p>
       <h3>아이템</h3>
       <p>수류탄을 먹으면 그 자리에 설치되고, 헐크가 밟으면 터져요.<br>
         <b style="color:#fff">거미줄 수류탄</b> 헐크 속도 감소 &nbsp;·&nbsp; <b style="color:#3ff2c4">전기 수류탄</b> 헐크 기절</p>
       <h3>목표</h3>
       <p>헐크에게 잡히지 않고 복도 끝 <b>100m</b>까지 달리기</p>
+      <p class="dim" style="margin-top:8px">효과음: <a href="https://pixabay.com/ko/" target="_blank" style="color:#9fd3ff">Pixabay</a> &nbsp;·&nbsp; BGM: <a href="https://www.youtube.com/watch?v=3QEzgkVlY3s&list=PLMPeUTGUX56s&index=14" target="_blank" style="color:#9fd3ff">YouTube</a></p>
       <button class="btn small" id="bHelpClose">닫기</button>
     </div>
   </div>
@@ -109,7 +110,7 @@ const DEF = {hulkSpeed:1.35, spiderSpeed:1, startGap:20, goal:100, webSlowPct:50
 const LABELS = {hulkSpeed:'헐크 속도 (m/s)', spiderSpeed:'스파이더맨 속도 (m/s)', startGap:'시작 거리차 = 스파이더맨 시작 위치 (m)', goal:'총 거리 (m)',
   webSlowPct:'거미줄 수류탄 감속률 (%)', webDur:'거미줄 감속 지속 (초)', elecStun:'전기 수류탄 헐크 기절 (초)', rockStun:'돌 충돌 기절 (초)',
   clapHold:'박수치기 준비 동작 (초)', clapStun:'박수치기 기절 (초)'};
-const FIX = {rockWarn:1, itemWarn:2, rockFaces:[2,2,3,4], rockInterval:[5,2.5,2.5,2.5], itemInterval:5,
+const FIX = {rockWarn:2, itemWarn:2, rockFaces:[2,2,3,4], rockInterval:[5,2.5,2.5,2.5], itemInterval:5,
   jumpTime:.3, tumbleTime:.3, landLock:.08, hitWin:.12};
 let CFG;
 function loadCfg(){
@@ -165,7 +166,7 @@ function auInit(){
   for(const k in (window.SND_DATA||{})){ const b=Uint8Array.from(atob(SND_DATA[k]),c=>c.charCodeAt(0)).buffer;
     C.decodeAudioData(b,a=>{ AU.buf[k]=a; },()=>{}); }
 }
-function setMute(m){ AU.muted=m; try{localStorage.setItem('bnd_mute',m?'1':'0');}catch(e){}
+function setMute(m){ AU.muted=m; if(typeof BGM!=='undefined') BGM.volume=m?0:.5; try{localStorage.setItem('bnd_mute',m?'1':'0');}catch(e){}
   if(AU.master) AU.master.gain.value=m?0:.8; document.getElementById('bMute').textContent=m?'🔇':'🔊'; }
 function env(gn,t,att,dur,vol){ gn.gain.setValueAtTime(0,t); gn.gain.linearRampToValueAtTime(vol,t+att); gn.gain.exponentialRampToValueAtTime(.0001,t+dur); }
 function tone(o){ if(!AU.ctx) return; const C=AU.ctx, t=C.currentTime+(o.t||0);
@@ -181,7 +182,7 @@ function noise(o){ if(!AU.ctx) return; const C=AU.ctx, t=C.currentTime+(o.t||0);
   fl.Q.value=o.q||1; const gn=C.createGain(); s.connect(fl); fl.connect(gn); gn.connect(o.dest||AU.sfx);
   env(gn,t,o.att||.005,o.dur||.3,o.vol||.3); s.start(t,Math.random()*1.5); s.stop(t+(o.dur||.3)+.05); }
 // 사용자 제공 음원 재생 (불러오기 전이면 합성음으로 대체)
-const SND_VOL={web:1.6,elec:.8,hulk:.9,rock:.8,sense:.7};
+const SND_VOL={web:1.6,elec:.8,hulk:.9,rock:.8,sense:.7,clap:.9};
 function playSnd(k,fallback){ if(!AU.ctx) return; const b=AU.buf&&AU.buf[k]; if(!b){ if(fallback) fallback(); return; }
   const s=AU.ctx.createBufferSource(), gn=AU.ctx.createGain(); s.buffer=b; gn.gain.value=SND_VOL[k]||1; s.connect(gn); gn.connect(AU.sfx); s.start(); }
 const SFX={
@@ -213,7 +214,12 @@ const MUS={on:false,lvl:0,next:0,step:0};
 const mf=m=>440*Math.pow(2,(m-69)/12);
 const PROG=[[40,[52,55,59]],[36,[48,52,55]],[45,[57,60,64]],[47,[54,59,63]]];
 function musicStart(){ if(!AU.ctx) return; MUS.on=true; MUS.next=AU.ctx.currentTime+.05; MUS.step=0; }
-function musicStop(){ MUS.on=false; }
+function musicStop(){ MUS.on=false; BGM.pause(); }
+// BGM.mp3 (불러오지 못하면 합성 배경음으로 대체)
+const BGM=new Audio('BGM.mp3'); BGM.loop=true; BGM.preload='auto'; let bgmOk=true;
+BGM.addEventListener('error',()=>{ bgmOk=false; });
+function bgmStart(){ if(!bgmOk){ musicStart(); return; } BGM.currentTime=0; BGM.volume=AU.muted?0:.5; BGM.play().catch(()=>{ bgmOk=false; musicStart(); }); }
+function bgmResume(on){ if(!bgmOk||!['play','intro'].includes(state)) return; on?BGM.play().catch(()=>{}):BGM.pause(); }
 function musicTick(){
   if(!MUS.on||!AU.ctx) return; const C=AU.ctx, sd=60/150/4;
   while(MUS.next<C.currentTime+.15){
@@ -283,22 +289,22 @@ function show(id,on){ $(id).classList.toggle('hidden',!on); }
 function startGame(){
   auInit(); newRun(); state='intro'; paused=false;
   ['title','over','clear','pause','balance'].forEach(i=>show(i,false));
-  MUS.lvl=0; musicStart();
+  MUS.lvl=0; bgmStart();
 }
 function toTitle(){ state='title'; paused=false; musicStop(); newRun(); ['over','clear','pause'].forEach(i=>show(i,false)); show('title',true); }
 function togglePause(){
   if(!['play','intro'].includes(state)) return;
   paused=!paused; show('pause',paused);
-  if(AU.ctx){ paused?AU.ctx.suspend():AU.ctx.resume(); }
+  if(AU.ctx){ paused?AU.ctx.suspend():AU.ctx.resume(); } bgmResume(!paused);
 }
 $('bStart').onclick=startGame; $('bRetry').onclick=startGame; $('bRetry2').onclick=startGame;
 $('bTitle1').onclick=toTitle; $('bTitle2').onclick=toTitle; $('bQuit').onclick=toTitle;
 $('bResume').onclick=togglePause; $('bPause').onclick=togglePause;
 let helpPaused=false;
 function openHelp(){ if($('helpBox').classList.contains('hidden')===false) return;
-  if(['play','intro'].includes(state) && !paused){ paused=true; helpPaused=true; if(AU.ctx) AU.ctx.suspend(); }
+  if(['play','intro'].includes(state) && !paused){ paused=true; helpPaused=true; if(AU.ctx) AU.ctx.suspend(); bgmResume(false); }
   show('helpBox',true); }
-function closeHelp(){ show('helpBox',false); if(helpPaused){ helpPaused=false; paused=false; if(AU.ctx) AU.ctx.resume(); } }
+function closeHelp(){ show('helpBox',false); if(helpPaused){ helpPaused=false; paused=false; if(AU.ctx) AU.ctx.resume(); bgmResume(true); } }
 $('bHelp').onclick=openHelp; $('bHelpClose').onclick=closeHelp;
 $('bMute').onclick=()=>{ auInit(); setMute(!AU.muted); }; setMute(AU.muted);
 // 밸런스 패널
@@ -325,11 +331,11 @@ function updatePlay(dt){
   S.t+=dt;
   // 박수치기 (4페이즈 진입 시 1회)
   if(!S.clapped && S.sp>=phaseAt()[2]){ S.clapped=true; S.p4=0; say('hulk','RAAAARGH!',2,true); SFX.roar(); }
-  if(S.p4>=0){ S.p4+=dt; if(S.p4>=2 && !S.windup){ S.windup=1; S.hHold=CFG.clapHold; S.clapT=0; playSnd('sense',()=>SFX.sense('rock')); } }
+  if(S.p4>=0){ S.p4+=dt; if(S.p4>=2 && !S.windup){ S.windup=1; S.hHold=CFG.clapHold; S.clapT=0; playSnd('sense',()=>SFX.sense('rock')); say('hulk','HULK SMASH!',2,true); playSnd('hulk',SFX.roar); } }
     if(S.clapShow>0) S.clapShow-=dt;
   if(S.hHold>0){ S.hHold-=dt; S.clapT+=dt;
-    if(S.hHold<=0){ S.sStun=Math.max(S.sStun,CFG.clapStun); S.stunType='clap'; shake=22; flash=.25; SFX.clap(); playSnd('hulk');
-      say('hulk','HULK SMASH!',2,true); S.clapWave=1; S.clapShow=.9;
+    if(S.hHold<=0){ S.sStun=Math.max(S.sStun,CFG.clapStun); S.stunType='clap'; shake=22; flash=.25; playSnd('clap',SFX.clap);
+      S.clapWave=1; S.clapShow=.9;
       if(S.move){ S.face=S.move.to; S.move=null; } } }
   // 스파이더맨
   if(S.move){ S.move.t+=dt; if(S.move.t>=S.move.dur){ S.face=S.move.to; S.move=null; S.landLock=FIX.landLock; } }
